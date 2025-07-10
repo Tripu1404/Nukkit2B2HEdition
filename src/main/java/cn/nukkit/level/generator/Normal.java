@@ -31,7 +31,7 @@ import java.util.SplittableRandom;
  * Mostly rewritten by DaPorkchop_
  * <p>
  * The generator classes, and others related to terrain generation are theirs and are intended for NUKKIT USAGE and should not be copied/translated to other server software
- * such as BukkitPE, ClearSky, Genisys, PocketMine-MP, or others
+ * such as BukkitPE, ClearSky, Genisys, PocketMine-MP, or others :3
  */
 public class Normal extends Generator {
     public static final int BEDROCK_LAYER = -64;
