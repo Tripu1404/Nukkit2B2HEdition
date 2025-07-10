@@ -80,21 +80,6 @@ public class Normal extends Generator {
             new PopulatorSpring(BlockID.LAVA, BlockID.STONE, 10, 16, 255),
             new PopulatorBedrock(BEDROCK_LAYER)
     );
-    private List<Populator> structurePopulators = ImmutableList.of(
-            new PopulatorFossil(),
-            new PopulatorShipwreck(),
-            new PopulatorSwampHut(),
-            new PopulatorDesertPyramid(),
-            new PopulatorJungleTemple(),
-            new PopulatorIgloo(),
-            new PopulatorPillagerOutpost(),
-            new PopulatorOceanRuin(),
-            new PopulatorVillage(),
-            new PopulatorStronghold(),
-            new PopulatorMineshaft(),
-            new PopulatorDesertWell(),
-            new PopulatorDungeon()
-    );
     public static final int seaHeight = 64; // should be 62
     public NoiseGeneratorOctavesF scaleNoise;
     public NoiseGeneratorOctavesF depthNoise;
