@@ -1,5 +1,6 @@
 package cn.nukkit.level.generator;
 
+import cn.nukkit.Server;
 import cn.nukkit.block.Block;
 import cn.nukkit.block.BlockID;
 import cn.nukkit.block.BlockStone;
@@ -7,15 +8,13 @@ import cn.nukkit.level.ChunkManager;
 import cn.nukkit.level.biome.Biome;
 import cn.nukkit.level.biome.BiomeSelector;
 import cn.nukkit.level.biome.EnumBiome;
-import cn.nukkit.level.biome.impl.beach.BeachBiome;
-import cn.nukkit.level.biome.impl.mushroom.MushroomIslandBiome;
-import cn.nukkit.level.biome.impl.swamp.SwampBiome;
-import cn.nukkit.level.biome.type.WateryBiome;
 import cn.nukkit.level.format.generic.BaseFullChunk;
 import cn.nukkit.level.generator.noise.vanilla.f.NoiseGeneratorOctavesF;
 import cn.nukkit.level.generator.object.ore.OreType;
 import cn.nukkit.level.generator.populator.impl.*;
+import cn.nukkit.level.generator.populator.overworld.*;
 import cn.nukkit.level.generator.populator.type.Populator;
+import cn.nukkit.level.generator.task.ChunkPopulationTask;
 import cn.nukkit.math.MathHelper;
 import cn.nukkit.math.NukkitRandom;
 import cn.nukkit.math.Vector3;
@@ -30,8 +29,12 @@ import java.util.SplittableRandom;
  * Nukkit's terrain generator
  * Originally adapted from the PocketMine-MP generator by NycuRO and CreeperFace
  * Mostly rewritten by DaPorkchop_
+ * <p>
+ * The generator classes, and others related to terrain generation are theirs and are intended for NUKKIT USAGE and should not be copied/translated to other server software
+ * such as BukkitPE, ClearSky, Genisys, PocketMine-MP, or others
  */
 public class Normal extends Generator {
+    public static final int BEDROCK_LAYER = -64;
 
     private static final float[] biomeWeights = new float[25];
 
@@ -43,21 +46,68 @@ public class Normal extends Generator {
         }
     }
 
-    private final int version;
-    private List<Populator> populators = Collections.emptyList();
-    private List<Populator> generationPopulators = Collections.emptyList();
-    public static int seaHeight = 64; // should be 62
+    private List<Populator> generationPopulators = ImmutableList.of(
+            new PopulatorDeepslate(BEDROCK_LAYER),
+            new PopulatorGroundCover()
+    );
+    private List<Populator> populators = ImmutableList.of(
+            new PopulatorOre(STONE, new OreType[]{
+                    new OreType(Block.get(BlockID.COAL_ORE), 20, 17, 0, 128),
+                    new OreType(Block.get(BlockID.COPPER_ORE), 17, 9, 0, 64),
+                    new OreType(Block.get(BlockID.IRON_ORE), 20, 9, 0, 64),
+                    new OreType(Block.get(BlockID.REDSTONE_ORE), 8, 8, 0, 16),
+                    new OreType(Block.get(BlockID.LAPIS_ORE), 1, 7, 0, 30),
+                    new OreType(Block.get(BlockID.GOLD_ORE), 2, 9, 0, 32),
+                    new OreType(Block.get(BlockID.DIAMOND_ORE), 1, 8, 0, 16),
+                    new OreType(Block.get(BlockID.DIRT), 10, 33, 0, 128),
+                    new OreType(Block.get(BlockID.GRAVEL), 8, 33, 0, 128),
+                    new OreType(Block.get(BlockID.STONE, BlockStone.GRANITE), 10, 33, 0, 80),
+                    new OreType(Block.get(BlockID.STONE, BlockStone.DIORITE), 10, 33, 0, 80),
+                    new OreType(Block.get(BlockID.STONE, BlockStone.ANDESITE), 10, 33, 0, 80),
+                    new OreType(Block.get(BlockID.DEEPSLATE), 20, 33, 0, 8)
+            }),
+            new PopulatorOre(BlockID.DEEPSLATE, new OreType[]{
+                    new OreType(Block.get(BlockID.DEEPSLATE_COAL_ORE), 1, 13, -4, 8, BlockID.DEEPSLATE),
+                    new OreType(Block.get(BlockID.DEEPSLATE_COPPER_ORE), 5, 9, -64, 8, BlockID.DEEPSLATE),
+                    new OreType(Block.get(BlockID.DEEPSLATE_IRON_ORE), 5, 9, -64, 8, BlockID.DEEPSLATE),
+                    new OreType(Block.get(BlockID.DEEPSLATE_REDSTONE_ORE), 8, 8, -64, 8, BlockID.DEEPSLATE),
+                    new OreType(Block.get(BlockID.DEEPSLATE_LAPIS_ORE), 6, 6, -64, 8, BlockID.DEEPSLATE),
+                    new OreType(Block.get(BlockID.DEEPSLATE_GOLD_ORE), 2, 9, -64, 8, BlockID.DEEPSLATE),
+                    new OreType(Block.get(BlockID.DEEPSLATE_DIAMOND_ORE), 4, 5, -64, 8, BlockID.DEEPSLATE)
+            }),
+            new PopulatorCaves(BEDROCK_LAYER),
+            new PopulatorSpring(BlockID.WATER, BlockID.STONE, 15, 8, 255),
+            new PopulatorSpring(BlockID.LAVA, BlockID.STONE, 10, 16, 255),
+            new PopulatorBedrock(BEDROCK_LAYER)
+    );
+    private List<Populator> structurePopulators = ImmutableList.of(
+            new PopulatorFossil(),
+            new PopulatorShipwreck(),
+            new PopulatorSwampHut(),
+            new PopulatorDesertPyramid(),
+            new PopulatorJungleTemple(),
+            new PopulatorIgloo(),
+            new PopulatorPillagerOutpost(),
+            new PopulatorOceanRuin(),
+            new PopulatorVillage(),
+            new PopulatorStronghold(),
+            new PopulatorMineshaft(),
+            new PopulatorDesertWell(),
+            new PopulatorDungeon()
+    );
+    public static final int seaHeight = 64; // should be 62
+    public NoiseGeneratorOctavesF scaleNoise;
     public NoiseGeneratorOctavesF depthNoise;
     private ChunkManager level;
     private NukkitRandom nukkitRandom;
     private long localSeed1;
     private long localSeed2;
     private BiomeSelector selector;
-    private final ThreadLocal<float[]> depthRegion = ThreadLocal.withInitial(() -> null);
-    private final ThreadLocal<float[]> mainNoiseRegion = ThreadLocal.withInitial(() -> null);
-    private final ThreadLocal<float[]> minLimitRegion = ThreadLocal.withInitial(() -> null);
-    private final ThreadLocal<float[]> maxLimitRegion = ThreadLocal.withInitial(() -> null);
-    private final ThreadLocal<float[]> heightMap = ThreadLocal.withInitial(() -> new float[825]);
+    private ThreadLocal<float[]> depthRegion = ThreadLocal.withInitial(() -> null);
+    private ThreadLocal<float[]> mainNoiseRegion = ThreadLocal.withInitial(() -> null);
+    private ThreadLocal<float[]> minLimitRegion = ThreadLocal.withInitial(() -> null);
+    private ThreadLocal<float[]> maxLimitRegion = ThreadLocal.withInitial(() -> null);
+    private ThreadLocal<float[]> heightMap = ThreadLocal.withInitial(() -> new float[825]);
     private NoiseGeneratorOctavesF minLimitPerlinNoise;
     private NoiseGeneratorOctavesF maxLimitPerlinNoise;
     private NoiseGeneratorOctavesF mainPerlinNoise;
@@ -67,7 +117,6 @@ public class Normal extends Generator {
     }
 
     public Normal(Map<String, Object> options) {
-        this.version = (int) options.getOrDefault("__Version", 0);
     }
 
     @Override
@@ -91,51 +140,33 @@ public class Normal extends Generator {
     }
 
     public Biome pickBiome(int x, int z) {
-        return this.selector.pickBiome(x, z, this.version);
+        return this.selector.pickBiome(x, z);
     }
 
     @Override
     public void init(ChunkManager level, NukkitRandom random) {
         this.level = level;
         this.nukkitRandom = random;
+        SplittableRandom random1 = new SplittableRandom();
         this.nukkitRandom.setSeed(this.level.getSeed());
-
-        SplittableRandom random1 = new SplittableRandom(this.level.getSeed());
         this.localSeed1 = random1.nextLong();
         this.localSeed2 = random1.nextLong();
-
+        this.nukkitRandom.setSeed(this.level.getSeed());
         this.selector = new BiomeSelector(this.nukkitRandom);
 
         this.minLimitPerlinNoise = new NoiseGeneratorOctavesF(random, 16);
         this.maxLimitPerlinNoise = new NoiseGeneratorOctavesF(random, 16);
         this.mainPerlinNoise = new NoiseGeneratorOctavesF(random, 8);
+        this.scaleNoise = new NoiseGeneratorOctavesF(random, 10);
         this.depthNoise = new NoiseGeneratorOctavesF(random, 16);
+    }
 
-        //this should run before all other populators so that we don't do things like generate ground cover on bedrock or something
-        this.generationPopulators = ImmutableList.of(
-                new PopulatorBedrock(),
-                new PopulatorGroundCover()
-        );
-
-        this.populators = ImmutableList.of(
-                new PopulatorOre(STONE, new OreType[]{
-                        new OreType(Block.get(BlockID.COAL_ORE), 20, 17, 0, 128),
-                        new OreType(Block.get(BlockID.IRON_ORE), 20, 9, 0, 64),
-                        new OreType(Block.get(BlockID.REDSTONE_ORE), 8, 8, 0, 16),
-                        new OreType(Block.get(BlockID.LAPIS_ORE), 1, 7, 0, 30),
-                        new OreType(Block.get(BlockID.GOLD_ORE), 2, 9, 0, 32),
-                        new OreType(Block.get(BlockID.DIAMOND_ORE), 1, 8, 0, 16),
-                        new OreType(Block.get(BlockID.DIRT), 10, 33, 0, 128),
-                        new OreType(Block.get(BlockID.GRAVEL), 8, 33, 0, 128),
-                        new OreType(Block.get(BlockID.STONE, BlockStone.GRANITE), 10, 33, 0, 80),
-                        new OreType(Block.get(BlockID.STONE, BlockStone.DIORITE), 10, 33, 0, 80),
-                        new OreType(Block.get(BlockID.STONE, BlockStone.ANDESITE), 10, 33, 0, 80)
-                }),
-                new PopulatorCaves(),
-                new WaterIcePopulator(), // Populate water ice here to avoid sharp corners when the chunk is not fully on a freezing biome
-                new PopulatorSpring(BlockID.WATER, BlockID.STONE, 15, 8, 255),
-                new PopulatorSpring(BlockID.LAVA, BlockID.STONE, 10, 16, 255)
-        );
+    @Override
+    public void populateStructure(final int chunkX, final int chunkZ) {
+        final BaseFullChunk chunk = level.getChunk(chunkX, chunkZ);
+        for (final Populator populator : structurePopulators) {
+            Server.getInstance().computeThreadPool.submit(new ChunkPopulationTask(level, chunk, populator));
+        }
     }
 
     @Override
@@ -244,12 +275,6 @@ public class Normal extends Generator {
             }
         }
 
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                chunk.setBiome(x, z, selector.pickBiome(baseX | x, baseZ | z, this.version));
-            }
-        }
-
         //place blocks
         for (int xSeg = 0; xSeg < 4; ++xSeg) {
             int xScale = xSeg * 5;
@@ -282,21 +307,10 @@ public class Normal extends Generator {
                             double scaleZ2 = baseIncr - scaleZ;
 
                             for (int xIn = 0; xIn < 4; ++xIn) {
-                                int xxx = (xSeg << 2) + zIn;
-                                int yyy = (ySeg << 3) + yIn;
-                                int zzz = (zSeg << 2) + xIn;
-
-                                if ((scaleZ2 += scaleZ) > 0.0) {
-                                    chunk.setBlockId(xxx, yyy, zzz, STONE);
-                                } else if (yyy <= seaHeight) {
-                                    chunk.setBlockId(xxx, yyy, zzz, STILL_WATER);
-
-                                    if (yyy < seaHeight) {
-                                        Biome biome = Biome.getBiome(chunk.getBiomeId(xxx, zzz));
-                                        if (!(biome instanceof WateryBiome) && !(biome instanceof BeachBiome) && !(biome instanceof SwampBiome) && !(biome instanceof MushroomIslandBiome)) { // don't replace shore
-                                            chunk.setBiome(xxx, zzz, biome.isFreezing() ? EnumBiome.FROZEN_RIVER.biome : EnumBiome.RIVER.biome);
-                                        }
-                                    }
+                                if ((scaleZ2 += scaleZ) > 0.0f) {
+                                    chunk.setBlockId((xSeg << 2) + zIn, (ySeg << 3) + yIn, (zSeg << 2) + xIn, STONE);
+                                } else if ((ySeg << 3) + yIn <= seaHeight) {
+                                    chunk.setBlockId((xSeg << 2) + zIn, (ySeg << 3) + yIn, (zSeg << 2) + xIn, STILL_WATER);
                                 }
                             }
 
@@ -313,6 +327,12 @@ public class Normal extends Generator {
             }
         }
 
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                chunk.setBiome(x, z, selector.pickBiome(baseX | x, baseZ | z));
+            }
+        }
+
         //populate chunk
         for (Populator populator : this.generationPopulators) {
             populator.populate(this.level, chunkX, chunkZ, this.nukkitRandom, chunk);
@@ -321,15 +341,12 @@ public class Normal extends Generator {
 
     @Override
     public void populateChunk(int chunkX, int chunkZ) {
-        BaseFullChunk chunk = level.getChunk(chunkX, chunkZ);
-
         this.nukkitRandom.setSeed(0xdeadbeef ^ (chunkX << 8) ^ chunkZ ^ this.level.getSeed());
-
         for (Populator populator : this.populators) {
-            populator.populate(this.level, chunkX, chunkZ, this.nukkitRandom, chunk);
+            populator.populate(this.level, chunkX, chunkZ, this.nukkitRandom, level.getChunk(chunkX, chunkZ));
         }
 
-        Biome biome = Biome.getBiome(chunk.getBiomeId(7, 7));
+        Biome biome = EnumBiome.getBiome(level.getChunk(chunkX, chunkZ).getBiomeId(7, 7));
         biome.populateChunk(this.level, chunkX, chunkZ, this.nukkitRandom);
     }
 
